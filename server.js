@@ -6,59 +6,67 @@ const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(200);
+    res.writeHead(204);
     res.end();
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/extract') {
+  if (req.method === 'GET') {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Progressive Recovery API is running');
+    return;
+  }
+
+  if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk.toString(); });
     req.on('end', () => {
-      const parsed = JSON.parse(body);
-      const payload = JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: parsed.messages
-      });
-
-      const options = {
-        hostname: 'api.anthropic.com',
-        path: '/v1/messages',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
-          'anthropic-version': '2023-06-01',
-          'Content-Length': Buffer.byteLength(payload)
-        }
-      };
-
-      const apiReq = https.request(options, (apiRes) => {
-        let data = '';
-        apiRes.on('data', chunk => { data += chunk; });
-        apiRes.on('end', () => {
-          res.writeHead(200, {'Content-Type': 'application/json'});
-          res.end(data);
+      try {
+        const parsed = JSON.parse(body);
+        const payload = JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: parsed.messages
         });
-      });
 
-      apiReq.on('error', (e) => {
-        res.writeHead(500);
-        res.end(JSON.stringify({error: e.message}));
-      });
+        const options = {
+          hostname: 'api.anthropic.com',
+          path: '/v1/messages',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'anthropic-version': '2023-06-01',
+            'Content-Length': Buffer.byteLength(payload)
+          }
+        };
 
-      apiReq.write(payload);
-      apiReq.end();
+        const apiReq = https.request(options, (apiRes) => {
+          let data = '';
+          apiRes.on('data', chunk => { data += chunk; });
+          apiRes.on('end', () => {
+            res.writeHead(200, {'Content-Type': 'application/json'});
+            res.end(data);
+          });
+        });
+
+        apiReq.on('error', (e) => {
+          res.writeHead(500);
+          res.end(JSON.stringify({error: e.message}));
+        });
+
+        apiReq.write(payload);
+        apiReq.end();
+      } catch(e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({error: 'Bad request'}));
+      }
     });
-  } else {
-    res.writeHead(200);
-    res.end('Progressive Recovery API running');
   }
 });
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
